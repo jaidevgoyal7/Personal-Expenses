@@ -1,50 +1,102 @@
+import './widgets/transaction_card.dart';
+import 'package:splash_screen_view/SplashScreenView.dart';
+import './widgets/Fab.dart';
+import './provider/Transaction_Provider.dart';
+import 'package:flutter/rendering.dart';
+import './widgets/week_chart.dart';
+import './widgets/daily_meter.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/material.dart';
-import './widgets/new_transaction.dart';
-import './widgets/transaction_list.dart';
-import './models/transaction.dart';
-import './widgets/chart.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_swiper/flutter_swiper.dart';
+import 'package:workmanager/workmanager.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() {
-  // WidgetsFlutterBinding.ensureInitialized();
-  // SystemChrome.setPreferredOrientations(
-  //   [DeviceOrientation.portraitUp, DeviceOrientation.portraitDown],
-  // );
+  WidgetsFlutterBinding.ensureInitialized();
 
-  runApp(MyApp());
+  Workmanager.initialize(
+    callbackDispatcher,
+  );
+
+  SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp])
+      .then((_) {
+    runApp(
+      ChangeNotifierProvider.value(
+        value: TransactionProvider(),
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Personal Xpense',
+          theme: ThemeData(
+            primarySwatch: Colors.teal,
+            accentColor: Colors.redAccent,
+            fontFamily: 'OpenSans',
+            textTheme: ThemeData.light().textTheme.copyWith(
+                  title: TextStyle(
+                    fontFamily: 'OpenSans',
+                    fontSize: 25,
+                  ),
+                ),
+          ),
+          home: MyApp(),
+        ),
+      ),
+    );
+  });
 }
 
-class MyApp extends StatelessWidget {
+void callbackDispatcher() {
+  Workmanager.executeTask((task, inputData) {
+    FlutterLocalNotificationsPlugin flip =
+        new FlutterLocalNotificationsPlugin();
+    var android = new AndroidInitializationSettings('icon');
+
+    var settings = new InitializationSettings(
+      android: android,
+    );
+    flip.initialize(settings);
+    _showNotificationWithDefaultSound(flip);
+    return Future.value(true);
+  });
+}
+
+Future _showNotificationWithDefaultSound(flip) async {
+  var androidPlatformChannelSpecifics = new AndroidNotificationDetails(
+    "jaidevgoyal7",
+    "Jaidev Goyal",
+    "Today's Expense",
+    onlyAlertOnce: true,
+    importance: Importance.max,
+    priority: Priority.max,
+  );
+
+  var platformChannelSpecifics = new NotificationDetails(
+    android: androidPlatformChannelSpecifics,
+  );
+  await flip.show(
+    0,
+    "Forget to add expenses?",
+    "Add them now before they will be skipped from your mind.",
+    platformChannelSpecifics,
+    payload: 'Default_Sound',
+  );
+}
+
+class MyApp extends StatefulWidget {
+  @override
+  _MyAppState createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Personal Expenses',
-      theme: ThemeData(
-        primarySwatch: Colors.teal,
-        accentColor: Colors.redAccent,
-        fontFamily: 'BlackOpsOne',
-        appBarTheme: AppBarTheme(
-          textTheme: ThemeData.light().textTheme.copyWith(
-                title: TextStyle(
-                  fontFamily: 'VT323',
-                  fontSize: 33,
-                ),
-              ),
-        ),
-        textTheme: ThemeData.light().textTheme.copyWith(
-              title: TextStyle(
-                fontFamily: 'VT323',
-                fontSize: 28,
-              ),
-            ),
-        // primaryTextTheme: ThemeData.light().textTheme.copyWith(
-        //       title: TextStyle(
-        //         fontFamily: 'VT323',
-        //         fontSize: 24,
-        //         color: Colors.black,
-        //       ),
-        //     ),
-      ),
-      home: MyHome(),
+    final deviceHeight = MediaQuery.of(context).size.height;
+    return SplashScreenView(
+      navigateRoute: MyHome(),
+      duration: 3800,
+      imageSrc: "images/SplashScreen.gif",
+      backgroundColor: Colors.white,
+      imageSize: (deviceHeight - 20).round(),
     );
   }
 }
@@ -54,155 +106,128 @@ class MyHome extends StatefulWidget {
   _MyHomeState createState() => _MyHomeState();
 }
 
-class _MyHomeState extends State<MyHome> {
-  final List<Transaction> _userTransactions = [
-    // Transaction(
-    //   id: 't1',
-    //   title: 'Milk',
-    //   amount: 28,
-    //   date: DateTime.now(),
-    // ),
-    // Transaction(
-    //   id: 't2',
-    //   title: 'Curd',
-    //   amount: 36,
-    //   date: DateTime.now(),
-    // ),
-  ];
+class _MyHomeState extends State<MyHome> with SingleTickerProviderStateMixin {
+  ScrollController _scrollController;
+  AnimationController _hideAnimation;
 
-  List<Transaction> get _recentTransactions {
-    return _userTransactions.where(
-      (transaction1) {
-        return transaction1.date.isAfter(
-          DateTime.now().subtract(
-            Duration(days: 7),
-          ),
-        );
-      },
-    ).toList();
-  }
+  bool showFab = false;
 
-  bool _LandscapeMode = false;
+  @override
+  void initState() {
+    super.initState();
 
-  void _addNewTransaction(String txTitle, double txAmount, DateTime txDate) {
-    final addTx = Transaction(
-      id: DateTime.now().toString(),
-      title: txTitle,
-      amount: txAmount,
-      date: txDate,
+    _scrollController = ScrollController();
+    _hideAnimation = AnimationController(
+      vsync: this,
+      duration: Duration(microseconds: 1),
+      value: 1,
     );
-    setState(() {
-      _userTransactions.add(addTx);
+    _scrollController.addListener(() {
+      switch (_scrollController.position.userScrollDirection) {
+        case ScrollDirection.forward:
+          _hideAnimation.forward();
+          break;
+        case ScrollDirection.reverse:
+          _hideAnimation.reverse();
+          break;
+        case ScrollDirection.idle:
+          break;
+      }
     });
   }
 
-  void _AddModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(25.0),
-        ),
-      ),
-      isScrollControlled: true,
-      builder: (btx) {
-        return NewTransaction(_addNewTransaction);
-      },
-    );
-  }
-
-  void _deleteTransaction(String id) {
-    setState(
-      () {
-        _userTransactions.removeWhere(
-          (element) {
-            return element.id == id;
-          },
-        );
-      },
-    );
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLandsacpe =
-        MediaQuery.of(context).orientation == Orientation.landscape;
-    final appBar = AppBar(
-      title: Text('Personal Expenses'),
-      backgroundColor: Colors.teal,
-      actions: <Widget>[
-        IconButton(
-          icon: Icon(Icons.add),
-          onPressed: () => _AddModal(context),
-        ),
-      ],
+    final deviceWidth = MediaQuery.of(context).size.width;
+    final deviceHeight = MediaQuery.of(context).size.height;
+    final List<Widget> card = [
+      WeekChart(Provider.of<TransactionProvider>(context).recentTransactions),
+      DailyMeter(),
+    ];
+
+    Workmanager.registerPeriodicTask(
+      "2",
+      "simplePeriodicTask",
+      frequency: Duration(hours: 13,),
     );
-    final txWidget = Container(
-      height: (MediaQuery.of(context).size.height -
-              appBar.preferredSize.height -
-              MediaQuery.of(context).padding.top) *
-          0.75,
-      child: TransactionList(_userTransactions, _deleteTransaction),
-    );
+
     return Scaffold(
-      appBar: appBar,
-      body: SafeArea(
+      body: NotificationListener<UserScrollNotification>(
+        onNotification: (notification) {
+          setState(() {
+            if (notification.direction == ScrollDirection.forward ||
+                _scrollController.position.pixels == 0) {
+              showFab = false;
+            } else if (notification.direction == ScrollDirection.reverse) {
+              showFab = true;
+            }
+          });
+          return true;
+        },
         child: SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              if (isLandsacpe)
-                Container(
-                  height: 50,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: <Widget>[
-                      Text(
-                        'Charts',
-                        style: Theme.of(context).textTheme.title,
-                      ),
-                      Switch(
-                        value: _LandscapeMode,
-                        onChanged: (val) {
-                          setState(
-                            () {
-                              _LandscapeMode = val;
-                            },
-                          );
-                        },
-                      ),
-                    ],
+              Padding(
+                padding: EdgeInsets.only(
+                  top: 28,
+                ),
+              ),
+              Container(
+                height: (deviceHeight -
+                        MediaQuery.of(context).padding.top -
+                        MediaQuery.of(context).padding.bottom) *
+                    0.27,
+                width: double.infinity,
+                child: Swiper(
+                  itemBuilder: (context, index) {
+                    return card[index];
+                  },
+                  itemCount: card.length,
+                  viewportFraction: 1,
+                  scale: 0.9,
+                  pagination: SwiperPagination(
+                    alignment: Alignment.bottomCenter,
+                    margin: EdgeInsets.only(
+                      bottom: 2,
+                    ),
+                    builder: new DotSwiperPaginationBuilder(
+                      color: Colors.grey,
+                      activeColor: Colors.teal,
+                    ),
                   ),
+                  loop: true,
                 ),
-              if (!isLandsacpe)
-                Container(
-                  height: (MediaQuery.of(context).size.height -
-                          appBar.preferredSize.height -
-                          MediaQuery.of(context).padding.top) *
-                      0.25,
-                  child: Chart(_recentTransactions),
+              ),
+              Container(
+                height: (deviceHeight -
+                        MediaQuery.of(context).padding.top -
+                        MediaQuery.of(context).padding.bottom) *
+                    0.75,
+                width: double.infinity,
+                child: TransactionCard(
+                  Provider.of<TransactionProvider>(context).itemMap,
+                  deviceWidth,
+                  _scrollController,
                 ),
-              if (!isLandsacpe) txWidget,
-              if (isLandsacpe)
-                _LandscapeMode
-                    ? Container(
-                        height: (MediaQuery.of(context).size.height -
-                                appBar.preferredSize.height -
-                                50 -
-                                MediaQuery.of(context).padding.top) *
-                            0.79,
-                        child: Chart(_recentTransactions),
-                      )
-                    : txWidget,
+              ),
             ],
           ),
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.add),
-        onPressed: () => _AddModal(context),
-      ),
+      floatingActionButton: showFab
+          ? null
+          : FadeTransition(
+              opacity: _hideAnimation,
+              child: Fab(deviceHeight, deviceWidth, _scrollController),
+            ),
     );
   }
 }
